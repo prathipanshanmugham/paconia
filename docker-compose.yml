@@ -1,0 +1,44 @@
+name: paconia
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: paconia-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: paconia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: paconia
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paconia"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: .
+    container_name: paconia-web
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    volumes:
+      - uploads:/app/uploads
+
+  # One-off tool container (Prisma CLI + tsx) used by deploy.sh for migrations and seeding.
+  tools:
+    build:
+      context: .
+      target: builder
+    env_file: .env
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:

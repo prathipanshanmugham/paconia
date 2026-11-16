@@ -1,0 +1,10 @@
+node_modules
+.next
+.env
+*.log
+uploads
+src/generated
+docker-compose.override.yml
+tests/out
+tsconfig.tsbuildinfo
+next-env.d.ts
