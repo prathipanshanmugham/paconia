@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot installer for Paconia on the Hostinger VPS (Ubuntu). Run as root from /opt/paconia:
-#   bash deploy/bootstrap.sh paconia.in you@email.com
+#   bash deploy/bootstrap.sh paconia.com you@email.com
 # Works next to Kraftshed and the Triagon ERP: if a Caddy container already fronts the server it joins
 # Caddy's network and adds a site block; on a plain server it sets up Nginx + certbot instead.
 set -euo pipefail
@@ -74,7 +74,11 @@ YML
     cat >> "$CADDYFILE" <<CADDY
 
 # Paconia (added by paconia/deploy/bootstrap.sh)
-${DOMAIN}, www.${DOMAIN} {
+www.${DOMAIN} {
+    redir https://${DOMAIN}{uri} permanent
+}
+
+${DOMAIN} {
     encode gzip
     request_body {
         max_size 50MB

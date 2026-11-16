@@ -6,7 +6,7 @@ Nginx + certbot instead). Its database and uploads are separate from the other a
 
 ## 1. Point the domain
 
-At the domain registrar, add two **A records** to the VPS IP:
+At the registrar for **paconia.com**, add two **A records** to the VPS IP (the same IP Kraftshed uses):
 
 | Type | Name | Value |
 |---|---|---|
@@ -19,10 +19,10 @@ At the domain registrar, add two **A records** to the VPS IP:
 ssh root@<vps-ip>
 git clone https://github.com/prathipanshanmugham/paconia.git /opt/paconia
 cd /opt/paconia
-bash deploy/bootstrap.sh <your-domain> <your-email>
+bash deploy/bootstrap.sh paconia.com <your-email>
 ```
 
-It takes 5–8 minutes and ends by printing the **owner login**. Sign in at `https://<domain>/desk`, then:
+`www.paconia.com` redirects to `paconia.com`. It takes 5–8 minutes and ends by printing the **owner login**. Sign in at `https://paconia.com/desk`, then:
 
 1. **Settings → Team** — change the owner password; add staff with their roles.
 2. **Settings → Business** — check address, GSTIN, bank and UPI details (printed on invoices).
@@ -42,7 +42,7 @@ cd /opt/paconia && nano .env
 ./deploy/deploy.sh
 ```
 
-In the Razorpay dashboard add a webhook to `https://<domain>/api/razorpay/webhook` with the events
+In the Razorpay dashboard add a webhook to `https://paconia.com/api/razorpay/webhook` with the events
 `payment.captured` and `order.paid`.
 
 Until keys are set, the website offers **pay at pickup** only. `PAYMENTS_DEMO="1"` simulates payments for testing —
