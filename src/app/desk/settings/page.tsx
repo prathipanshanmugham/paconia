@@ -56,7 +56,7 @@ async function Business() {
         </section>
         <section className="card-pad grid gap-3 sm:grid-cols-2">
           <h2 className="font-semibold sm:col-span-2">Invoices</h2>
-          <label className="text-sm"><span className="label">Number prefix</span><input name="inv.prefix" defaultValue={inv.prefix} className="input mono uppercase" maxLength={6} /><p className="hint">PAC → PAC/2026-27/0001</p></label>
+          <label className="text-sm"><span className="label">Number prefix</span><input name="inv.prefix" defaultValue={inv.prefix} className="input mono uppercase" maxLength={6} /><p className="hint">PAC → PAC/26-27/0001 (GST allows 16 characters)</p></label>
           <label className="text-sm"><span className="label">Default credit days</span><input name="inv.creditDays" type="number" min={0} defaultValue={inv.creditDays} className="input" /></label>
           <label className="text-sm sm:col-span-2"><span className="label">Terms printed on invoices</span><textarea name="inv.terms" defaultValue={inv.terms} className="input min-h-[70px]" /></label>
         </section>
