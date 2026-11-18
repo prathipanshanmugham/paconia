@@ -1,11 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import ProductArt from '@/components/ProductArt';
+import dynamic from 'next/dynamic';
 import { FINISH_LABEL, price, type MaterialInfo, type PricingSettings, type ProductConfig } from '@/lib/pricing';
 import { unitPrice } from './money';
 
-type P = { id: string; slug: string; name: string; family: string; model: 'SHEET' | 'POUCH' | 'LASER'; shape: string; gstRate: number; leadDays: number; config: ProductConfig };
+const Mockup3D = dynamic(() => import('@/components/three/Mockup3D'), { ssr: false });
+
+type P = { id: string; slug: string; name: string; family: string; model: 'SHEET' | 'POUCH' | 'LASER'; shape: string; gstRate: number; leadDays: number; config: ProductConfig; image?: string | null };
 const FAMILY: Record<string, string> = { LABELS: 'Labels & stickers', PACKAGING: 'Boxes & packaging', POUCHES: 'Pouches', CARDS: 'Cards & invitations', LASER: 'Laser cut & engraved' };
 const rs = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -24,16 +26,25 @@ export default function InstantPrice({ products, mats, ps }: { products: P[]; ma
   const [qty, setQty] = useState(cfg.qtyTiers[Math.min(2, cfg.qtyTiers.length - 1)]);
   const choose = (id: string) => {
     const n = products.find((x) => x.id === id)!;
-    setPid(id); setSize(Math.min(1, n.config.sizes.length - 1)); setMaterial(n.config.materials[0]); setFinish(n.config.finishes[0]); setQty(n.config.qtyTiers[Math.min(2, n.config.qtyTiers.length - 1)]);
+    setReady3d(false); setPid(id); setSize(Math.min(1, n.config.sizes.length - 1)); setMaterial(n.config.materials[0]); setFinish(n.config.finishes[0]); setQty(n.config.qtyTiers[Math.min(2, n.config.qtyTiers.length - 1)]);
   };
   const r = useMemo(() => price(p.model, cfg, { size, material, finish, qty, sides: 1, extras: [] }, mats, ps), [p, cfg, size, material, finish, qty, mats, ps]);
   const tiers = useMemo(() => cfg.qtyTiers.map((q) => { const t = price(p.model, cfg, { size, material, finish, qty: q, sides: 1, extras: [] }, mats, ps); return { q, unit: t.ok ? t.unit : null }; }), [p, cfg, size, material, finish, mats, ps]);
   const s = cfg.sizes[size];
   const href = `/p/${p.slug}?size=${size}&material=${encodeURIComponent(material)}&finish=${finish}&qty=${qty}`;
   const sel = 'input font-medium';
+  const [ready3d, setReady3d] = useState(false);
   return (
     <div className="swoosh-frame shadow-lift">
-      <div className="rounded-[20px] bg-white p-5 sm:p-6">
+      <div className="overflow-hidden rounded-[20px] bg-white">
+        <div className="bg-studio relative aspect-[2/1] border-b border-line">
+          {!ready3d && p.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.image} alt="" className="absolute inset-0 h-full w-full object-contain" />
+          )}
+          <Mockup3D key={p.id} shape={p.shape} w={s.w} h={s.h} d={s.d} round={s.round} material={material} finish={finish} scrollTurn={1.1} className="absolute inset-0" label={`${p.name}, ${matName(material, mats)}`} onReady={() => setReady3d(true)} />
+        </div>
+        <div className="p-5 sm:p-6">
         <h2 className="text-xl">Price your print</h2>
         <p className="mt-1 text-sm text-ink-soft">Pick the options. The price is exact, before GST.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -47,8 +58,7 @@ export default function InstantPrice({ products, mats, ps }: { products: P[]; ma
           <label className={`text-sm ${cfg.finishes.length > 1 ? '' : 'sm:col-span-2'}`}><span className="label">Quantity</span>
             <select className={sel} value={qty} onChange={(e) => setQty(Number(e.target.value))}>{tiers.map((t) => <option key={t.q} value={t.q}>{t.q.toLocaleString('en-IN')} pieces{t.unit !== null ? `, ${unitPrice(t.unit)} each` : ''}</option>)}</select></label>
         </div>
-        <div className="mt-5 grid grid-cols-[96px_1fr] items-center gap-4 border-t border-line pt-5" aria-live="polite">
-          <div className="aspect-square rounded-xl bg-paper"><ProductArt shape={p.shape} colour={mats[material]?.colour || '#fff'} w={s.w} h={s.h} d={s.d} round={s.round} white={mats[material]?.needsWhite} className="h-full w-full" label={p.name} /></div>
+        <div className="mt-5 border-t border-line pt-5" aria-live="polite">
           {r.ok ? (
             <div>
               <p className="num text-[2.5rem] font-extrabold leading-none tracking-tight">{unitPrice(r.unit)}<span className="ml-1 text-base font-medium text-ink-soft">a piece</span></p>
@@ -57,6 +67,7 @@ export default function InstantPrice({ products, mats, ps }: { products: P[]; ma
           ) : <p className="text-sm text-amber-800">{r.error}</p>}
         </div>
         <Link href={href} className="btn-primary btn-lg mt-5 w-full">Continue with these options</Link>
+        </div>
       </div>
     </div>
   );

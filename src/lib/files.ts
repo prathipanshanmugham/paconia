@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile } from 'fs/promises';
+import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import { db } from './db';
@@ -16,7 +16,7 @@ export function checkUpload(f: File): string | null {
   return null;
 }
 
-export async function storeFile(f: File, meta: { kind?: string; uploadedById?: string | null; cartToken?: string | null; orderId?: string | null; orderItemId?: string | null }) {
+export async function storeFile(f: File, meta: { kind?: string; uploadedById?: string | null; cartToken?: string | null; orderId?: string | null; orderItemId?: string | null; productId?: string | null; sort?: number }) {
   const ext = (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
   const day = new Date().toISOString().slice(0, 7);
   const dir = path.join(UPLOAD_DIR, day);
@@ -27,6 +27,7 @@ export async function storeFile(f: File, meta: { kind?: string; uploadedById?: s
     data: {
       name: f.name.slice(0, 180), mime: f.type || 'application/octet-stream', size: f.size, path: path.join(day, name),
       kind: meta.kind || 'ARTWORK', uploadedById: meta.uploadedById ?? null, cartToken: meta.cartToken ?? null, orderId: meta.orderId ?? null, orderItemId: meta.orderItemId ?? null,
+      productId: meta.productId ?? null, sort: meta.sort ?? 0,
     },
   });
 }
@@ -35,6 +36,12 @@ export async function readStored(p: string) {
   const full = path.resolve(UPLOAD_DIR, p);
   if (!full.startsWith(UPLOAD_DIR + path.sep)) throw new Error('bad path');
   return readFile(full);
+}
+
+export async function removeStored(p: string) {
+  const full = path.resolve(UPLOAD_DIR, p);
+  if (!full.startsWith(UPLOAD_DIR + path.sep)) return;
+  await unlink(full).catch(() => undefined);
 }
 
 export const fileUrl = (id: string) => `/api/files/${id}`;

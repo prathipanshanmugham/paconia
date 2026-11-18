@@ -12,7 +12,8 @@ export const viewport: Viewport = { themeColor: '#F6F7F4', width: 'device-width'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IN">
+    <html lang="en-IN" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} /></head>
       <body className="min-h-screen">{children}</body>
     </html>
   );

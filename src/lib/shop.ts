@@ -3,11 +3,12 @@ import { allMaterialInfo } from './catalog';
 import { getPricing } from './settings';
 import { price, type ProductConfig } from './pricing';
 import type { Product } from '@/generated/prisma/client';
+import { productImage } from './images';
 
-export type Card = Product & { fromUnit: number | null; fromQty: number; colour: string; w: number; h: number; d?: number; round?: boolean };
+export type Card = Product & { fromUnit: number | null; fromQty: number; colour: string; w: number; h: number; d?: number; round?: boolean; image: { src: string; photo: boolean } | null };
 
 export async function productCards(where: { family?: string } = {}): Promise<Card[]> {
-  const products = await db.product.findMany({ where: { active: true, ...(where.family ? { family: where.family as Product['family'] } : {}) }, orderBy: [{ family: 'asc' }, { sort: 'asc' }] });
+  const products = await db.product.findMany({ where: { active: true, ...(where.family ? { family: where.family as Product['family'] } : {}) }, orderBy: [{ family: 'asc' }, { sort: 'asc' }], include: { photos: { where: { kind: 'PRODUCT' }, orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }], take: 1, select: { id: true } } } });
   const mats = await allMaterialInfo();
   const ps = await getPricing();
   return products.map((p) => {
@@ -21,6 +22,7 @@ export async function productCards(where: { family?: string } = {}): Promise<Car
     }
     const firstMat = mats[cfg.materials[0]] || Object.values(mats).find((x) => x.code.startsWith(cfg.materials[0] + '-'));
     const s0 = cfg.sizes[Math.min(1, cfg.sizes.length - 1)];
-    return { ...p, fromUnit, fromQty: qty, colour: firstMat?.colour || '#FFFFFF', w: s0.w, h: s0.h, d: s0.d, round: s0.round };
+    const { photos, ...rest } = p;
+    return { ...rest, fromUnit, fromQty: qty, colour: firstMat?.colour || '#FFFFFF', w: s0.w, h: s0.h, d: s0.d, round: s0.round, image: productImage(p.slug, photos[0]?.id) };
   });
 }

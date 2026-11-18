@@ -5,11 +5,19 @@ import { readCartToken } from '@/lib/cart';
 import { readStored } from '@/lib/files';
 
 export const runtime = 'nodejs';
+const PHOTO_MIME = /^image\/(png|jpeg|webp)$/;
 
 /** Streams an uploaded file to staff, the customer who owns the order, or the visitor whose cart it belongs to. */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const f = await db.fileAsset.findUnique({ where: { id: params.id }, include: { order: { include: { customer: true } } } });
   if (!f) return new NextResponse('Not found', { status: 404 });
+  // product photos are public catalogue images (raster only)
+  if (f.kind === 'PRODUCT' && f.productId && PHOTO_MIME.test(f.mime)) {
+    try {
+      const buf = await readStored(f.path);
+      return new NextResponse(new Uint8Array(buf), { headers: { 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
+    } catch { return new NextResponse('File missing', { status: 410 }); }
+  }
   const s = await getSession();
   const allowed = isStaff(s?.role) || (s && f.order?.customer.userId === s.userId) || (f.cartToken && f.cartToken === readCartToken()) || (s && f.uploadedById === s.userId);
   if (!allowed) return new NextResponse('Not allowed', { status: 403 });

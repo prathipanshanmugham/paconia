@@ -6,17 +6,52 @@ import { PageHead } from '@/components/ui';
 import ActionForm from '@/components/FormMessage';
 import SubmitButton from '@/components/SubmitButton';
 import { saveProduct } from '@/app/actions/desk-admin';
+import { addProductPhotos, makeCoverPhoto, removeProductPhoto } from '@/app/actions/desk-photos';
+import { fileUrl } from '@/lib/files';
 
 export const metadata = { title: 'Product' };
 
 export default async function ProductEdit({ params }: { params: { slug: string } }) {
   await requireStaff('catalogue');
-  const p = await db.product.findUnique({ where: { slug: params.slug } });
+  const p = await db.product.findUnique({ where: { slug: params.slug }, include: { photos: { where: { kind: 'PRODUCT' }, orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }] } } });
   if (!p) notFound();
   const codes = await db.material.findMany({ where: { active: true }, select: { code: true, name: true }, orderBy: { code: 'asc' } });
   return (
     <>
       <PageHead back={{ href: '/desk/catalogue', label: 'Catalogue' }} title={p.name} sub={`${p.model === 'SHEET' ? 'Priced by SRA3 sheet' : p.model === 'POUCH' ? 'Priced per pouch blank' : 'Priced by laser time and sheet'} · /p/${p.slug}`} actions={<Link href={`/p/${p.slug}`} className="btn-secondary btn-sm" target="_blank">View on website</Link>} />
+      <section className="card mb-6">
+        <div className="panel-head"><h2>Photos</h2><span className="text-sm text-ink-soft">{p.photos.length} of 8</span></div>
+        <div className="p-5">
+          <p className="mb-4 max-w-[70ch] text-sm text-ink-soft">Real photos of this product. They show next to the live 3D preview on the website, and the first one is the picture on product cards. Without photos the website uses the 3D render.</p>
+          {p.photos.length > 0 && (
+            <ul className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+              {p.photos.map((f, i) => (
+                <li key={f.id} className="overflow-hidden rounded-xl border border-line bg-paper">
+                  <div className="relative aspect-square">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={fileUrl(f.id)} alt={f.name} className="h-full w-full object-cover" />
+                    {i === 0 && <span className="badge absolute left-2 top-2 bg-white/95 text-ink">Cover</span>}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
+                    {i > 0 ? <form action={makeCoverPhoto}><input type="hidden" name="id" value={f.id} /><button className="text-sky-700 hover:underline">Make cover</button></form> : <span className="text-ink-soft">On cards</span>}
+                    <form action={removeProductPhoto}><input type="hidden" name="id" value={f.id} /><button className="text-rose-700 hover:underline">Remove</button></form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {p.photos.length < 8 && (
+            <ActionForm action={addProductPhotos} resetOnOk>
+              <input type="hidden" name="productId" value={p.id} />
+              <div className="flex flex-wrap items-center gap-3">
+                <input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp" className="input max-w-sm py-2 text-sm" aria-label="Product photos" />
+                <SubmitButton className="btn-secondary">Upload photos</SubmitButton>
+                <span className="hint">JPG, PNG or WebP, up to 8 MB each. Square photos look best.</span>
+              </div>
+            </ActionForm>
+          )}
+        </div>
+      </section>
       <ActionForm action={saveProduct} className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <input type="hidden" name="id" value={p.id} />
         <section className="card-pad space-y-4">

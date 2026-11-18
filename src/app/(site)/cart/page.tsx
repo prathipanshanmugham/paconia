@@ -6,6 +6,7 @@ import { removeCartLine } from '@/app/actions/shop';
 import { computeTax } from '@/lib/gst';
 import { inr, inr2 } from '@/lib/format';
 import { prettySize } from '@/lib/files';
+import { mockupFor } from '@/lib/images';
 import { allMaterialInfo } from '@/lib/catalog';
 import { getShipping } from '@/lib/settings';
 import { unitPrice } from '@/components/site/money';
@@ -41,7 +42,10 @@ export default async function Cart() {
             const r = l.priced;
             return (
               <div key={l.id} className="grid gap-4 p-4 sm:grid-cols-[120px_1fr_auto]">
-                <div className="aspect-[4/3] rounded-lg bg-mist"><ProductArt shape={l.product.shape} colour={m?.colour} w={r.ok ? r.dims.w : 60} h={r.ok ? r.dims.h : 40} d={r.ok ? r.dims.d : 40} className="h-full w-full" /></div>
+                <div className="bg-studio aspect-[4/3] overflow-hidden rounded-lg">{mockupFor(l.product.slug) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={mockupFor(l.product.slug)!} alt="" className="h-full w-full object-contain" />
+                ) : <ProductArt shape={l.product.shape} colour={m?.colour} w={r.ok ? r.dims.w : 60} h={r.ok ? r.dims.h : 40} d={r.ok ? r.dims.d : 40} className="h-full w-full" />}</div>
                 <div className="min-w-0">
                   <Link href={`/p/${l.product.slug}`} className="font-semibold hover:underline">{l.product.name}</Link>
                   {r.ok ? <p className="mt-0.5 text-sm text-ink-soft">{r.summary}</p> : <p className="mt-1 text-sm text-rose-700">{r.error}</p>}

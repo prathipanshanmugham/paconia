@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { familyByKey, materialLabel, materialsFor, publicMats, publicPricing } from '@/lib/catalog';
 import { getPricing } from '@/lib/settings';
 import Configurator from '@/components/site/Configurator';
+import { fileUrl } from '@/lib/files';
 import type { ProductConfig } from '@/lib/pricing';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function ProductPage({ params, searchParams }: { params: { slug: string }; searchParams: { size?: string; material?: string; finish?: string; qty?: string } }) {
-  const p = await db.product.findUnique({ where: { slug: params.slug } });
+  const p = await db.product.findUnique({ where: { slug: params.slug }, include: { photos: { where: { kind: 'PRODUCT' }, orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }], select: { id: true, name: true } } } });
   if (!p || !p.active) notFound();
   const cfg = p.config as unknown as ProductConfig;
   const mats = await materialsFor(cfg);
@@ -29,7 +30,7 @@ export default async function ProductPage({ params, searchParams }: { params: { 
       <nav className="mb-5 text-sm text-ink-soft" aria-label="Breadcrumb"><Link href="/shop" className="hover:text-ink">Products</Link><span className="mx-2 text-ink-faint">/</span><Link href={`/shop/${fam?.slug}`} className="hover:text-ink">{fam?.name}</Link></nav>
       <Configurator
         product={{ id: p.id, slug: p.slug, name: p.name, tagline: p.tagline, description: p.description, model: p.model, shape: p.shape, hsn: p.hsn, gstRate: p.gstRate, leadDays: p.leadDays }}
-        cfg={cfg} mats={publicMats(mats)} ps={publicPricing(ps)} options={options}
+        cfg={cfg} mats={publicMats(mats)} ps={publicPricing(ps)} options={options} photos={p.photos.map((f) => ({ url: fileUrl(f.id), name: f.name }))}
         initial={{ size: searchParams.size === 'custom' ? 'custom' : searchParams.size !== undefined && /^\d+$/.test(searchParams.size) ? Number(searchParams.size) : undefined, material: searchParams.material, finish: searchParams.finish, qty: searchParams.qty && /^\d+$/.test(searchParams.qty) ? Number(searchParams.qty) : undefined }}
       />
     </div>

@@ -38,6 +38,13 @@ production board, enquiries, reports (sales, margins, receivables, GST, expenses
 quotes (create, renew, mark sent/declined, convert), orders, payments, starting production, moving jobs, issuing and
 adjusting stock, dispatch/delivery/cancel, expenses and enquiries.
 
+## Product pictures
+
+- **Live 3D mockups** (three.js, loaded only in the browser): the product page and the home price panel show a real-time model with paper, kraft, foil, clear, acrylic, wood and leather surfaces. It updates as the customer changes size, material or finish, and shows their uploaded logo. Drag to turn it. Without WebGL it falls back to the flat drawing.
+- **Stills** for cards, the home strip and the cart are pre-rendered from the same models into `public/mockups/<slug>.webp`. After adding a product, run the app and `python3 scripts/render_mockups.py http://localhost:3000 <slug>`.
+- **Real photos**: Desk → Catalogue → a product → Photos (up to 8, JPG/PNG/WebP). They appear next to the 3D view on the product page, and the first one becomes the picture on product cards. Product photos are public; artwork stays private.
+- Home page motion: the hero model turns as you scroll, a printed sheet folds into a box in a pinned section, the order steps fill a timeline, and sections reveal. All of it switches off for visitors who ask for reduced motion.
+
 ## Roles
 
 | Role | Can use |

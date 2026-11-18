@@ -125,6 +125,7 @@ model Product {
   orderItems  OrderItem[]
   quoteLines  QuoteLine[]
   cartLines   CartLine[]
+  photos      FileAsset[]
 }
 
 enum MaterialCategory {
@@ -575,8 +576,13 @@ model FileAsset {
   order        Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderItemId  String?
   orderItem    OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  productId    String?
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sort         Int        @default(0)
   createdAt    DateTime   @default(now())
   proof        Proof?
+
+  @@index([productId])
 }
 
 model CartLine {

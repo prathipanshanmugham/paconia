@@ -1,10 +1,13 @@
 'use client';
 import { useMemo, useState, useTransition } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import ProductArt from '@/components/ProductArt';
 import { FINISH_LABEL, price, tierPrices, type MaterialInfo, type PricingSettings, type ProductConfig, type Spec } from '@/lib/pricing';
 import { addToCart } from '@/app/actions/shop';
 import { unitPrice } from './money';
+
+const Mockup3D = dynamic(() => import('@/components/three/Mockup3D'), { ssr: false });
 
 type Opt = { code: string; name: string; colour: string; white: boolean; available: boolean };
 type Prod = { id: string; slug: string; name: string; tagline: string; description: string; model: 'SHEET' | 'POUCH' | 'LASER'; shape: string; hsn: string; gstRate: number; leadDays: number };
@@ -14,7 +17,7 @@ export type Initial = { size?: number | 'custom'; material?: string; finish?: st
 const rs = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 const rs2 = (n: number) => '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export default function Configurator({ product, cfg, mats, ps, options, initial = {} }: { product: Prod; cfg: ProductConfig; mats: Record<string, MaterialInfo>; ps: PricingSettings; options: Opt[]; initial?: Initial }) {
+export default function Configurator({ product, cfg, mats, ps, options, photos = [], initial = {} }: { product: Prod; cfg: ProductConfig; mats: Record<string, MaterialInfo>; ps: PricingSettings; options: Opt[]; photos?: { url: string; name: string }[]; initial?: Initial }) {
   const router = useRouter();
   const okMat = (c?: string) => (c && options.some((o) => o.code === c && o.available) ? c : undefined);
   const [size, setSize] = useState<number | 'custom'>(initial.size !== undefined && (initial.size === 'custom' ? cfg.custom : cfg.sizes[initial.size]) ? initial.size : Math.min(1, cfg.sizes.length - 1));
@@ -32,6 +35,8 @@ export default function Configurator({ product, cfg, mats, ps, options, initial 
   const [error, setError] = useState<string | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [pending, start] = useTransition();
+  const [ready3d, setReady3d] = useState(false);
+  const [shot, setShot] = useState<number | null>(null);
 
   const spec: Spec = useMemo(() => ({
     size, material, finish, qty, sides: cfg.sides ? sides : 1, extras,
@@ -46,14 +51,15 @@ export default function Configurator({ product, cfg, mats, ps, options, initial 
 
   async function upload(list: FileList | null) {
     if (!list?.length) return;
+    const picked = Array.from(list); // the input is cleared right after, which empties the live FileList
     setUploading(true); setError(null);
     const fd = new FormData();
-    Array.from(list).forEach((f) => fd.append('files', f));
+    picked.forEach((f) => fd.append('files', f));
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      const previews = Array.from(list).map((f) => (/^image\/(png|jpe?g|svg\+xml|webp)$/.test(f.type) ? URL.createObjectURL(f) : undefined));
+      const previews = picked.map((f) => (/^image\/(png|jpe?g|svg\+xml|webp)$/.test(f.type) ? URL.createObjectURL(f) : undefined));
       setFiles((prev) => [...prev, ...data.files.map((x: Uploaded, i: number) => ({ ...x, preview: previews[i] }))]);
       if (data.errors?.length) setError(data.errors.join(' '));
     } catch (e) {
@@ -94,10 +100,27 @@ export default function Configurator({ product, cfg, mats, ps, options, initial 
       <div className="lg:sticky lg:top-24 lg:self-start">
         <div className="mb-5 lg:hidden"><h1 className="text-3xl">{product.name}</h1><p className="mt-2 text-ink-soft">{product.description}</p></div>
         <div className="overflow-hidden rounded-2xl border border-line bg-white">
-          <div className="aspect-[4/3] bg-paper">
-            <ProductArt shape={product.shape} colour={opt?.colour} w={dims.w} h={dims.h} d={'d' in dims ? dims.d : undefined} round={size !== 'custom' && cfg.sizes[size]?.round} logo={logo} white={opt?.white} dims={cfg.form !== 'flat'} className="h-full w-full" label={`${product.name} preview`} />
+          <div className="bg-studio relative aspect-[4/3]">
+            {!ready3d && <ProductArt shape={product.shape} colour={opt?.colour} w={dims.w} h={dims.h} d={'d' in dims ? dims.d : undefined} round={size !== 'custom' && cfg.sizes[size]?.round} logo={logo} white={opt?.white} dims={cfg.form !== 'flat'} className="absolute inset-0 h-full w-full" label={`${product.name} preview`} />}
+            <Mockup3D interactive shape={product.shape} w={Number(dims.w) || 50} h={Number(dims.h) || 50} d={'d' in dims && dims.d ? Number(dims.d) : undefined} round={size !== 'custom' && cfg.sizes[size]?.round} material={material} finish={finish} logoUrl={logo} className="absolute inset-0" label={`${product.name} in 3D. Drag to turn it.`} onReady={() => setReady3d(true)} />
+            {ready3d && shot === null && <p className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-ink-soft shadow-sm">Drag to turn{logo ? '. Showing your logo' : ''}</p>}
+            {shot !== null && photos[shot] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photos[shot].url} alt={photos[shot].name} className="absolute inset-0 h-full w-full bg-white object-cover" />
+            )}
           </div>
-          <p className="border-t border-line px-4 py-2.5 text-sm text-ink-soft"><span className="num whitespace-nowrap font-semibold text-ink">{dims.w} × {dims.h}{cfg.form !== 'flat' && 'd' in dims ? ` × ${dims.d}` : ''} mm</span>. A preview only; you approve a proof before we print.</p>
+          {photos.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto border-t border-line p-2" role="tablist" aria-label="Pictures">
+              <button type="button" role="tab" aria-selected={shot === null} onClick={() => setShot(null)} className={`bg-studio grid h-16 w-20 shrink-0 place-items-center rounded-lg border text-xs font-semibold ${shot === null ? 'border-sky-500 ring-2 ring-sky-200' : 'border-line'}`}>3D view</button>
+              {photos.map((p, i) => (
+                <button key={p.url} type="button" role="tab" aria-selected={shot === i} onClick={() => setShot(i)} className={`h-16 w-20 shrink-0 overflow-hidden rounded-lg border ${shot === i ? 'border-sky-500 ring-2 ring-sky-200' : 'border-line'}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="border-t border-line px-4 py-2.5 text-sm text-ink-soft"><span className="num whitespace-nowrap font-semibold text-ink">{dims.w} × {dims.h}{cfg.form !== 'flat' && 'd' in dims ? ` × ${dims.d}` : ''} mm</span>. {shot === null ? 'A preview; you approve a proof before we print.' : 'A photo of work we have printed.'}</p>
         </div>
         <div className="mt-4 hidden rounded-2xl border border-line bg-white p-5 lg:block" aria-live="polite">
           {priceBlock}
