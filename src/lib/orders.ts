@@ -9,7 +9,7 @@ import type { Stage } from './pricing';
 import type { Channel, Fulfilment, JobStage, OrderStatus, PayMethod, PaymentTerms, Prisma } from '@/generated/prisma/client';
 
 export type NewItem = {
-  productId?: string | null; name: string; summary: string; spec?: unknown; qty: number; unitPrice: number; lineTotal: number;
+  productId?: string | null; name: string; summary: string; spec?: unknown; qty: number; unitPrice: number; lineTotal: number; lineCost?: number;
   hsn: string; gstRate: number; estimate?: { route?: Stage[]; sheets?: number; ups?: number; materials?: { code: string; qty: number }[]; minutes?: number; cut?: string } | null;
   artworkIds?: string[]; leadDays?: number;
 };
@@ -61,11 +61,12 @@ export async function createOrder(input: {
       shipName: input.ship?.name, shipPhone: input.ship?.phone, shipLine1: input.ship?.line1, shipLine2: input.ship?.line2 || null,
       shipCity: input.ship?.city, shipState: input.ship?.state || stateName(buyerState), shipStateCode: buyerState, shipPincode: input.ship?.pincode,
       subtotal, discount, shipping: input.shipping, taxable: tax.taxable, cgst: tax.cgst, sgst: tax.sgst, igst: tax.igst, total: tax.total,
+      cost: Math.round(input.items.reduce((a, i) => a + (i.lineCost || 0), 0) * 100) / 100,
       dueDate: due, notes: input.notes || null, createdById: s?.userId,
       items: {
         create: input.items.map((i) => ({
           productId: i.productId || null, name: i.name, summary: i.summary, spec: (i.spec ?? undefined) as Prisma.InputJsonValue | undefined,
-          qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal, hsn: i.hsn, gstRate: i.gstRate,
+          qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal, lineCost: i.lineCost || 0, hsn: i.hsn, gstRate: i.gstRate,
           estimate: (i.estimate ?? undefined) as Prisma.InputJsonValue | undefined,
         })),
       },

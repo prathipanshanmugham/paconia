@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import '@fontsource-variable/bricolage-grotesque';
-import '@fontsource-variable/onest';
-import '@fontsource-variable/jetbrains-mono';
+import '@fontsource-variable/figtree';
 import './globals.css';
 
 export const metadata: Metadata = {

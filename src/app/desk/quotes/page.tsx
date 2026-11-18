@@ -1,18 +1,23 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { requireStaff } from '@/lib/auth';
+import { requireStaff, seesCost } from '@/lib/auth';
 import { Badge, Empty, PageHead, Tabs } from '@/components/ui';
 import { ago, dateShort, inr2 } from '@/lib/format';
 import SubmitButton from '@/components/SubmitButton';
 import { setEnquiryStatus } from '@/app/actions/desk-quotes';
 import Icon from '@/components/desk/Icon';
+import { expireQuotes } from '@/lib/quotes';
+import { margin } from '@/lib/pricing';
+import { num } from '@/lib/format';
 
 export const metadata = { title: 'Quotes' };
 const QTONE = { DRAFT: 'muted', SENT: 'info', ACCEPTED: 'good', DECLINED: 'bad', EXPIRED: 'muted' } as const;
 const ETONE = { NEW: 'warn', CONTACTED: 'info', QUOTED: 'good', CLOSED: 'muted' } as const;
 
 export default async function Quotes({ searchParams }: { searchParams: { tab?: string } }) {
-  await requireStaff('quotes');
+  const me = await requireStaff('quotes');
+  await expireQuotes();
+  const showCost = seesCost(me.role);
   const tab = searchParams.tab === 'enquiries' ? 'enquiries' : 'quotes';
   const [quotes, enquiries, newCount] = await Promise.all([
     tab === 'quotes' ? db.quote.findMany({ orderBy: { createdAt: 'desc' }, take: 200, include: { customer: true, lines: { select: { name: true } }, order: { select: { number: true } } } }) : [],
@@ -26,15 +31,16 @@ export default async function Quotes({ searchParams }: { searchParams: { tab?: s
       <Tabs current={`/desk/quotes${tab === 'enquiries' ? '?tab=enquiries' : ''}`} items={[{ href: '/desk/quotes', label: 'Quotes' }, { href: '/desk/quotes?tab=enquiries', label: 'Website enquiries', count: newCount }]} />
       {tab === 'quotes' ? (
         <div className="card overflow-x-auto">{quotes.length ? (
-          <table className="tbl min-w-[760px]"><thead><tr><th>Quote</th><th>Customer</th><th>Items</th><th>Status</th><th>Valid until</th><th className="text-right">Total</th></tr></thead>
+          <table className="tbl min-w-[760px]"><thead><tr><th>Quote</th><th>Customer</th><th>Items</th><th>Status</th><th>Valid until</th>{showCost && <th className="text-right">Margin</th>}<th className="text-right">Total</th></tr></thead>
             <tbody>{quotes.map((q) => {
-              const expired = q.status !== 'ACCEPTED' && q.validUntil < now;
+              const expired = q.status === 'EXPIRED' || (q.status !== 'ACCEPTED' && !q.order && q.validUntil < now);
               return <tr key={q.id} className="rowlink">
                 <td><Link href={`/desk/quotes/${q.number}`} className="mono font-semibold hover:underline">{q.number}</Link><div className="text-xs text-ink-soft">{dateShort(q.createdAt)}</div></td>
                 <td>{q.customer.company || q.customer.name}</td>
                 <td className="max-w-[240px] truncate text-sm">{q.lines.map((l) => l.name).join(', ')}</td>
                 <td>{expired ? <Badge tone="muted">Expired</Badge> : <Badge tone={QTONE[q.status]}>{q.status === 'ACCEPTED' ? `Order ${q.order?.number || ''}` : q.status.charAt(0) + q.status.slice(1).toLowerCase()}</Badge>}</td>
-                <td className={expired ? 'text-ink-faint' : ''}>{dateShort(q.validUntil)}</td>
+                <td className={expired ? 'text-ink-faint' : q.status !== 'ACCEPTED' && q.validUntil.getTime() - now.getTime() < 3 * 86400000 ? 'font-semibold text-amber-800' : ''}>{dateShort(q.validUntil)}</td>
+                {showCost && <td className="num text-right text-sm">{num(q.cost) ? `${margin(num(q.subtotal) - num(q.discount), num(q.cost)).pct}%` : '—'}</td>}
                 <td className="num text-right">{inr2(q.total)}</td>
               </tr>;
             })}</tbody></table>) : <Empty title="No quotes yet" action={<Link href="/desk/quotes/new" className="btn-secondary">New quote</Link>} />}</div>

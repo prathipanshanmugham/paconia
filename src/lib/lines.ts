@@ -20,7 +20,7 @@ export const LineIn = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('custom'), name: z.string().trim().min(2, 'Name each custom item').max(120), summary: z.string().trim().max(300).default(''),
     hsn: z.string().trim().regex(/^\d{4,8}$/, 'HSN must be 4–8 digits'), gstRate: z.number().refine((n) => [0, 5, 12, 18, 28].includes(n), 'GST rate must be 0, 5, 12, 18 or 28'),
-    qty: z.number().int().positive('Quantity must be above zero'), rate: z.number().positive('Rate must be above zero'), leadDays: z.number().int().min(0).max(60).default(2),
+    qty: z.number().int().positive('Quantity must be above zero'), rate: z.number().positive('Rate must be above zero'), cost: z.number().min(0).default(0), leadDays: z.number().int().min(0).max(60).default(2),
   }),
 ]);
 export type LineIn = z.infer<typeof LineIn>;
@@ -31,7 +31,7 @@ export async function buildItems(lines: LineIn[]): Promise<{ items: NewItem[] } 
   const items: NewItem[] = [];
   for (const [i, l] of lines.entries()) {
     if (l.kind === 'custom') {
-      items.push({ name: l.name, summary: l.summary || l.name, qty: l.qty, unitPrice: l.rate, lineTotal: round2(l.qty * l.rate), hsn: l.hsn, gstRate: l.gstRate, leadDays: l.leadDays, estimate: { route: ['PREPRESS', 'PRINT', 'PACK'] } });
+      items.push({ name: l.name, summary: l.summary || l.name, qty: l.qty, unitPrice: l.rate, lineTotal: round2(l.qty * l.rate), lineCost: round2(l.qty * l.cost), hsn: l.hsn, gstRate: l.gstRate, leadDays: l.leadDays, estimate: { route: ['PREPRESS', 'PRINT', 'PACK'] } });
       continue;
     }
     const p = await db.product.findUnique({ where: { id: l.productId } });
@@ -43,7 +43,7 @@ export async function buildItems(lines: LineIn[]): Promise<{ items: NewItem[] } 
     const total = l.unitOverride ? round2(unit * r.qty) : r.total;
     items.push({
       productId: p.id, name: p.name, summary: r.summary + (l.unitOverride ? ' · special rate' : '') + (l.note ? ` · ${l.note}` : ''), spec: l.spec,
-      qty: r.qty, unitPrice: unit, lineTotal: total, hsn: p.hsn, gstRate: p.gstRate, leadDays: p.leadDays,
+      qty: r.qty, unitPrice: unit, lineTotal: total, lineCost: r.cost, hsn: p.hsn, gstRate: p.gstRate, leadDays: p.leadDays,
       estimate: { route: r.route, sheets: r.sheets, ups: r.ups, materials: r.materials, minutes: r.minutes, cut: cfg.cut },
     });
   }

@@ -13,6 +13,7 @@ import { price, type ProductConfig, type Spec } from '@/lib/pricing';
 import { nextQuoteNo } from '@/lib/numbering';
 import { addDays, num, round2 } from '@/lib/format';
 import { logActivity } from '@/lib/activity';
+import { renewQuote } from '@/lib/quotes';
 import { resolveCustomer } from '@/lib/customers';
 import type { FormResult } from '@/components/FormMessage';
 import type { Prisma } from '@/generated/prisma/client';
@@ -39,8 +40,9 @@ export async function createQuote(_p: FormResult, fd: FormData): Promise<FormRes
     data: {
       number: await nextQuoteNo(), customerId: c.id, validUntil: addDays(new Date(), p.data.validDays), notes: p.data.notes || null,
       subtotal: round2(sub), discount: round2(p.data.discount), taxable: tax.taxable, cgst: tax.cgst, sgst: tax.sgst, igst: tax.igst, total: tax.total,
+      cost: round2(built.items.reduce((a, i) => a + (i.lineCost || 0), 0)),
       enquiryId: p.data.enquiryId || null, createdById: s.userId,
-      lines: { create: built.items.map((i, k) => ({ productId: i.productId || null, name: i.name, summary: i.summary, spec: (i.spec ?? undefined) as Prisma.InputJsonValue | undefined, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal, hsn: i.hsn, gstRate: i.gstRate, sort: k })) },
+      lines: { create: built.items.map((i, k) => ({ productId: i.productId || null, name: i.name, summary: i.summary, spec: (i.spec ?? undefined) as Prisma.InputJsonValue | undefined, qty: i.qty, unitPrice: i.unitPrice, lineTotal: i.lineTotal, lineCost: i.lineCost || 0, hsn: i.hsn, gstRate: i.gstRate, sort: k })) },
     },
   });
   if (p.data.enquiryId) await db.enquiry.update({ where: { id: p.data.enquiryId }, data: { status: 'QUOTED', customerId: c.id } }).catch(() => null);
@@ -66,6 +68,8 @@ export async function convertQuote(_p: FormResult, fd: FormData): Promise<FormRe
   const q = await db.quote.findUnique({ where: { number: String(fd.get('number')) }, include: { lines: { orderBy: { sort: 'asc' }, include: { product: true } }, customer: true } });
   if (!q) return { error: 'Quote not found' };
   if (q.orderId) return { error: 'This quote is already an order' };
+  if (q.status === 'EXPIRED' || q.validUntil < new Date()) return { error: 'This quote has expired. Renew it first so the prices are current.' };
+  if (q.status === 'DECLINED') return { error: 'This quote was declined. Renew it to use it again.' };
   const fulfilment = fd.get('fulfilment') === 'COURIER' ? 'COURIER' : 'PICKUP';
   const terms = (['PREPAID', 'PAY_ON_PICKUP', 'CREDIT'] as const).find((t) => t === fd.get('terms')) || 'PAY_ON_PICKUP';
   const c = q.customer;
@@ -79,7 +83,7 @@ export async function convertQuote(_p: FormResult, fd: FormData): Promise<FormRe
       const r = price(l.product.model, cfg, l.spec as unknown as Spec, await materialsFor(cfg), ps);
       if (r.ok) estimate = { route: r.route, sheets: r.sheets, ups: r.ups, materials: r.materials, minutes: r.minutes, cut: cfg.cut };
     }
-    items.push({ productId: l.productId, name: l.name, summary: l.summary, spec: l.spec, qty: l.qty, unitPrice: num(l.unitPrice), lineTotal: num(l.lineTotal), hsn: l.hsn, gstRate: l.gstRate, leadDays: l.product?.leadDays || 3, estimate });
+    items.push({ productId: l.productId, name: l.name, summary: l.summary, spec: l.spec, qty: l.qty, unitPrice: num(l.unitPrice), lineTotal: num(l.lineTotal), lineCost: num(l.lineCost), hsn: l.hsn, gstRate: l.gstRate, leadDays: l.product?.leadDays || 3, estimate });
   }
   const stateCode = c.stateCode || SELLER_STATE_CODE;
   const shipping = shippingFor(await getShipping(), num(q.subtotal), stateCode, fulfilment);
@@ -99,4 +103,15 @@ export async function setEnquiryStatus(fd: FormData) {
   await db.enquiry.update({ where: { id: String(fd.get('id')) }, data: { status } });
   revalidatePath('/desk', 'layout');
   redirect('/desk/quotes?tab=enquiries');
+}
+
+export async function renewQuoteAction(_p: FormResult, fd: FormData): Promise<FormResult> {
+  const s = await requireStaff('quotes');
+  const q = await db.quote.findUnique({ where: { number: String(fd.get('number')) } });
+  if (!q) return { error: 'Quote not found' };
+  const days = Math.max(1, Math.min(90, Math.floor(Number(fd.get('days')) || 15)));
+  let changed = 0;
+  try { changed = (await renewQuote(q.id, days, s)).changed; } catch (e) { return { error: (e as Error).message }; }
+  revalidatePath('/desk/quotes', 'layout');
+  redirect(`/desk/quotes/${q.number}?renewed=${days}&repriced=${changed}`);
 }

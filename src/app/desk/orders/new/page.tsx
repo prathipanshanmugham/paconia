@@ -7,8 +7,8 @@ import { createDeskOrder } from '@/app/actions/desk-orders';
 export const metadata = { title: 'New order' };
 
 export default async function NewOrder({ searchParams }: { searchParams: { customer?: string } }) {
-  await requireStaff('orders');
-  const d = await lineBuilderData();
+  const s = await requireStaff('orders');
+  const d = await lineBuilderData(s.role);
   return (
     <>
       <PageHead title="New order" sub="Walk-in or B2B order. Prices come from the same engine as the website; enter a special rate to override." back={{ href: '/desk/orders', label: 'Orders' }} />

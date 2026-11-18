@@ -8,10 +8,12 @@ import { gstSummary } from '@/lib/gstReport';
 import ActionForm from '@/components/FormMessage';
 import SubmitButton from '@/components/SubmitButton';
 import { addExpense, deleteExpense } from '@/app/actions/desk-admin';
+import { margin } from '@/lib/pricing';
+import { getPricing } from '@/lib/settings';
 
 export const metadata = { title: 'Accounts' };
-const TABS = ['overview', 'invoices', 'payments', 'receivables', 'expenses', 'gst'] as const;
-const LABEL: Record<(typeof TABS)[number], string> = { overview: 'Overview', invoices: 'Invoices', payments: 'Payments', receivables: 'Receivables', expenses: 'Expenses', gst: 'GST summary' };
+const TABS = ['overview', 'margins', 'invoices', 'payments', 'receivables', 'expenses', 'gst'] as const;
+const LABEL: Record<(typeof TABS)[number], string> = { overview: 'Overview', margins: 'Margins', invoices: 'Invoices', payments: 'Payments', receivables: 'Receivables', expenses: 'Expenses', gst: 'GST summary' };
 const EXP_CATS = ['Rent', 'Electricity', 'Salaries', 'Toner & consumables', 'Courier', 'Machine service', 'Packing material', 'Internet & phone', 'Marketing', 'Transport', 'Other'];
 
 export default async function Accounts({ searchParams }: { searchParams: { tab?: string; month?: string } }) {
@@ -27,6 +29,7 @@ export default async function Accounts({ searchParams }: { searchParams: { tab?:
       <PageHead title="Accounts" actions={tab !== 'receivables' && monthNav} />
       <Tabs current={link(tab)} items={TABS.map((t) => ({ href: link(t), label: LABEL[t] }))} />
       {tab === 'overview' && <Overview start={p.start} end={p.end} />}
+      {tab === 'margins' && <Margins start={p.start} end={p.end} />}
       {tab === 'invoices' && <Invoices start={p.start} end={p.end} ym={p.ym} />}
       {tab === 'payments' && <Payments start={p.start} end={p.end} ym={p.ym} />}
       {tab === 'receivables' && <Receivables />}
@@ -148,6 +151,40 @@ async function Gst({ start, end, ym }: { start: Date; end: Date; ym: string }) {
         <section className="card overflow-x-auto"><div className="flex items-center justify-between border-b border-line px-5 py-3"><h2 className="font-semibold">HSN summary</h2><a href={`/desk/accounts/export?type=hsn&month=${ym}`} className="btn-ghost btn-sm">CSV</a></div><table className="tbl"><thead><tr><th>HSN</th><th>Rate</th><th className="text-right">Qty</th><th className="text-right">Taxable</th><th className="text-right">Tax</th></tr></thead><tbody>{g.hsn.map((h) => <tr key={h.hsn + h.rate}><td className="mono">{h.hsn}</td><td>{h.rate}%</td><td className="num text-right">{h.qty.toLocaleString('en-IN')}</td><td className="num text-right">{inr2(h.taxable)}</td><td className="num text-right">{inr2(h.tax)}</td></tr>)}</tbody></table></section>
       </div>
       <p className="text-xs text-ink-faint">Built from invoices issued in the month (cancelled invoices excluded). Input tax counts GST entered on expenses and on received purchase orders. Share the CSVs with your CA for GSTR-1 and GSTR-3B.</p>
+    </div>
+  );
+}
+
+async function Margins({ start, end }: { start: Date; end: Date }) {
+  const [orders, ps] = await Promise.all([
+    db.order.findMany({ where: { placedAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } }, include: { customer: true, items: true }, orderBy: { placedAt: 'desc' } }),
+    getPricing(),
+  ]);
+  const costed = orders.filter((o) => num(o.cost) > 0);
+  const sales = costed.reduce((a, o) => a + num(o.subtotal) - num(o.discount), 0), cost = costed.reduce((a, o) => a + num(o.cost), 0);
+  const m = margin(sales, cost);
+  const by = new Map<string, { sales: number; cost: number; qty: number }>();
+  for (const o of costed) for (const i of o.items) { if (!num(i.lineCost)) continue; const r = by.get(i.name) || { sales: 0, cost: 0, qty: 0 }; r.sales += num(i.lineTotal); r.cost += num(i.lineCost); r.qty += i.qty; by.set(i.name, r); }
+  const tone = (pct: number) => (pct < ps.minMargin ? 'bad' : pct < ps.targetMargin ? 'warn' : 'good') as 'bad' | 'warn' | 'good';
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Sales with costs recorded" value={inr(sales)} sub={`${costed.length} of ${orders.length} orders`} />
+        <Stat label="Our cost" value={inr(cost)} />
+        <Stat label="Profit before overheads" value={inr(m.amount)} />
+        <Stat label="Margin" value={`${m.pct}%`} tone={m.pct < ps.minMargin ? 'bad' : m.pct < ps.targetMargin ? 'warn' : undefined} sub={`target ${ps.targetMargin}%, minimum ${ps.minMargin}%`} />
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="card overflow-x-auto"><div className="panel-head"><h2 className="text-base">By product</h2></div>
+          {by.size ? <table className="tbl"><thead><tr><th>Product</th><th className="text-right">Pieces</th><th className="text-right">Sales</th><th className="text-right">Cost</th><th className="text-right">Margin</th></tr></thead>
+            <tbody>{[...by.entries()].sort((a, b) => b[1].sales - a[1].sales).map(([k, v]) => { const mm = margin(v.sales, v.cost); return <tr key={k}><td>{k}</td><td className="num text-right">{v.qty.toLocaleString('en-IN')}</td><td className="num text-right">{inr(v.sales)}</td><td className="num text-right">{inr(v.cost)}</td><td className="text-right"><Badge tone={tone(mm.pct)}>{mm.pct}%</Badge></td></tr>; })}</tbody></table>
+            : <Empty title="No costed orders this month" />}</section>
+        <section className="card overflow-x-auto"><div className="panel-head"><h2 className="text-base">By order</h2></div>
+          {costed.length ? <table className="tbl"><thead><tr><th>Order</th><th>Customer</th><th className="text-right">Sales</th><th className="text-right">Margin</th></tr></thead>
+            <tbody>{costed.map((o) => { const mm = margin(num(o.subtotal) - num(o.discount), num(o.cost)); return <tr key={o.id} className="rowlink"><td><Link href={`/desk/orders/${o.number}`} className="mono hover:underline">{o.number}</Link><div className="text-xs text-ink-faint">{dateShort(o.placedAt)}</div></td><td>{o.customer.company || o.customer.name}</td><td className="num text-right">{inr(num(o.subtotal) - num(o.discount))}</td><td className="text-right"><Badge tone={tone(mm.pct)}>{mm.pct}%</Badge></td></tr>; })}</tbody></table>
+            : <Empty title="No costed orders this month" />}</section>
+      </div>
+      <p className="text-xs text-ink-faint">Cost = materials at cost price plus printing, film, cutting, laser and setup costs from Prices, costs &amp; margins. Overheads such as rent and salaries are in Expenses. Orders made before costing was added are left out.</p>
     </div>
   );
 }

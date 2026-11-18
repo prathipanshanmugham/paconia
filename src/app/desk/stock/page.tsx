@@ -5,6 +5,7 @@ import { Badge, Empty, PageHead, Tabs } from '@/components/ui';
 import { dateShort, dateTime, inr, inr2, num, qtyFmt } from '@/lib/format';
 import { VendorForm } from '@/components/desk/StockForms';
 import Icon from '@/components/desk/Icon';
+import TabSelect from '@/components/TabSelect';
 import type { MaterialCategory } from '@/generated/prisma/client';
 
 export const metadata = { title: 'Stock' };
@@ -34,11 +35,9 @@ async function Materials({ filter, cat }: { filter?: string; cat?: string }) {
   const value = all.reduce((a, m) => a + num(m.onHand) * num(m.cost), 0);
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Link href="/desk/stock" className={`chip ${!filter && !cat ? 'chip-on' : ''}`}>All</Link>
-        <Link href="/desk/stock?filter=low" className={`chip ${filter === 'low' ? 'chip-on' : ''}`}>Below reorder <span className="num ml-1">{low.length}</span></Link>
-        {Object.entries(CAT).map(([k, v]) => <Link key={k} href={`/desk/stock?cat=${k}`} className={`chip ${cat === k ? 'chip-on' : ''}`}>{v}</Link>)}
-        <span className="ml-auto text-sm text-ink-soft">Stock value at cost: <b className="num text-ink">{inr(value)}</b></span>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="w-64"><span className="label">Show</span><TabSelect current={filter === 'low' ? '/desk/stock?filter=low' : cat ? `/desk/stock?cat=${cat}` : '/desk/stock'} items={[{ href: '/desk/stock', label: 'All materials' }, { href: '/desk/stock?filter=low', label: `Below reorder level (${low.length})` }, ...Object.entries(CAT).map(([k, v]) => ({ href: `/desk/stock?cat=${k}`, label: v }))]} /></div>
+        <p className="ml-auto pb-2 text-sm text-ink-soft">Stock value at cost: <b className="num text-ink">{inr(value)}</b></p>
       </div>
       <div className="card overflow-x-auto">{list.length ? <table className="tbl min-w-[760px]"><thead><tr><th>Material</th><th>Type</th><th className="text-right">On hand</th><th className="text-right">Reorder at</th><th className="text-right">Cost</th><th>Vendor</th></tr></thead>
         <tbody>{list.map((m) => {

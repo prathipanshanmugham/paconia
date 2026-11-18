@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import TabSelect from './TabSelect';
 
 export type Tone = 'good' | 'warn' | 'bad' | 'info' | 'muted';
 export const Badge = ({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) => <span className={`badge tone-${tone}`}>{children}</span>;
@@ -48,13 +49,16 @@ export const Field = ({ label, name, hint, children, className = '' }: { label: 
 
 export function Tabs({ items, current }: { items: { href: string; label: string; count?: number }[]; current: string }) {
   return (
-    <div className="mb-5 flex gap-1 overflow-x-auto border-b border-line">
-      {items.map((t) => (
-        <Link key={t.href} href={t.href} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${current === t.href ? 'border-leaf-600 text-ink' : 'border-transparent text-ink-soft hover:text-ink'}`}>
-          {t.label}{t.count !== undefined && <span className="ml-1.5 rounded-full bg-mist px-1.5 py-0.5 text-xs text-ink-soft">{t.count}</span>}
-        </Link>
-      ))}
-    </div>
+    <>
+      <div className="mb-5 sm:hidden"><TabSelect items={items} current={current} /></div>
+      <div className="mb-5 hidden gap-1 overflow-x-auto border-b border-line sm:flex" role="tablist">
+        {items.map((t) => (
+          <Link key={t.href} href={t.href} role="tab" aria-selected={current === t.href} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold ${current === t.href ? 'border-sky-600 text-ink' : 'border-transparent text-ink-soft hover:text-ink'}`}>
+            {t.label}{t.count !== undefined && <span className="num ml-1.5 rounded-full bg-mist px-1.5 py-0.5 text-xs text-ink-soft">{t.count}</span>}
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -72,13 +76,10 @@ export function KV({ rows }: { rows: [ReactNode, ReactNode][] }) {
   );
 }
 
-export const TonerStrip = ({ className = '' }: { className?: string }) => (
-  <div className={`flex h-1 w-full ${className}`} aria-hidden>
-    <span className="flex-1 bg-toner-c" /><span className="flex-1 bg-toner-m" /><span className="flex-1 bg-toner-y" /><span className="flex-1 bg-toner-k" /><span className="flex-1 bg-white" />
-  </div>
-);
-
-export const Logo = ({ small = false }: { small?: boolean }) => (
-  // eslint-disable-next-line @next/next/no-img-element
-  <span className="inline-flex items-center gap-2"><img src="/brand/mark.png" alt="" className={small ? 'h-6 w-auto' : 'h-8 w-auto'} /><img src="/brand/wordmark.png" alt="Paconia" className={small ? 'h-4 w-auto' : 'h-5 w-auto'} /></span>
-);
+/** The exact Paconia logo, cut from the original artwork. `lockup` = P mark above the wordmark; `mark` = P only. */
+export const Logo = ({ variant = 'lockup', className = '' }: { variant?: 'lockup' | 'mark'; className?: string; small?: boolean }) =>
+  variant === 'mark'
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src="/brand/mark.png" srcSet="/brand/mark.png 1x, /brand/mark@2x.png 2x" alt="Paconia" width={252} height={201} className={`h-8 w-auto ${className}`} />
+    // eslint-disable-next-line @next/next/no-img-element
+    : <img src="/brand/logo.png" srcSet="/brand/logo.png 1x, /brand/logo@2x.png 2x" alt="Paconia" width={256} height={180} className={`h-12 w-auto ${className}`} />;

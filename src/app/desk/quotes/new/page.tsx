@@ -8,8 +8,8 @@ import { createQuote } from '@/app/actions/desk-quotes';
 export const metadata = { title: 'New quote' };
 
 export default async function NewQuote({ searchParams }: { searchParams: { enquiry?: string; customer?: string } }) {
-  await requireStaff('quotes');
-  const d = await lineBuilderData();
+  const s = await requireStaff('quotes');
+  const d = await lineBuilderData(s.role);
   const e = searchParams.enquiry ? await db.enquiry.findUnique({ where: { id: searchParams.enquiry } }) : null;
   const match = e ? d.customers.find((c) => e.customerId === c.id || c.phone.replace(/\D/g, '').slice(-10) === e.phone.replace(/\D/g, '').slice(-10)) : null;
   return (

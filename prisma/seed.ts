@@ -102,7 +102,7 @@ async function demo() {
     const cfg = p.config as unknown as ProductConfig;
     const r = price(p.model, cfg, spec, mats, ps);
     if (!r.ok) throw new Error(`${slug}: ${r.error}`);
-    return { productId: p.id, name: p.name, summary: r.summary, spec, qty: r.qty, unitPrice: r.unit, lineTotal: r.total, hsn: p.hsn, gstRate: p.gstRate, leadDays: p.leadDays, estimate: { route: r.route, sheets: r.sheets, ups: r.ups, materials: r.materials, minutes: r.minutes, cut: cfg.cut } };
+    return { productId: p.id, name: p.name, summary: r.summary, spec, qty: r.qty, unitPrice: r.unit, lineTotal: r.total, lineCost: r.cost, hsn: p.hsn, gstRate: p.gstRate, leadDays: p.leadDays, estimate: { route: r.route, sheets: r.sheets, ups: r.ups, materials: r.materials, minutes: r.minutes, cut: cfg.cut } };
   };
   const ship = (c: typeof meena) => ({ name: c.company || c.name, phone: c.phone, line1: c.line1 || '', city: c.city || '', state: c.state || '', stateCode: c.stateCode || '33', pincode: c.pincode || '' });
 
@@ -204,8 +204,8 @@ async function demo() {
     const t = computeTax(lines.map((l) => ({ amount: l.lineTotal, gstRate: l.gstRate })), 0, 0, '33');
     await db.quote.create({
       data: {
-        number: await nextQuoteNo(), customerId, status, validUntil: addDays(new Date(), 15), enquiryId, subtotal: t.taxable, taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst, total: t.total, createdById: S.userId,
-        lines: { create: lines.map((l, i) => ({ productId: l.productId, name: l.name, summary: l.summary, spec: l.spec as Prisma.InputJsonValue, qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal, hsn: l.hsn, gstRate: l.gstRate, sort: i })) },
+        number: await nextQuoteNo(), customerId, status, validUntil: addDays(new Date(), 15), enquiryId, subtotal: t.taxable, taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst, total: t.total, cost: Math.round(lines.reduce((a, l) => a + (l.lineCost || 0), 0) * 100) / 100, createdById: S.userId,
+        lines: { create: lines.map((l, i) => ({ productId: l.productId, name: l.name, summary: l.summary, spec: l.spec as Prisma.InputJsonValue, qty: l.qty, unitPrice: l.unitPrice, lineTotal: l.lineTotal, lineCost: l.lineCost || 0, hsn: l.hsn, gstRate: l.gstRate, sort: i })) },
       },
     });
   };

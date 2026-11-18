@@ -68,3 +68,6 @@ export async function requireStaff(area: Area = 'today') {
 
 export const hashPassword = (p: string) => bcrypt.hash(p, 10);
 export const verifyPassword = (p: string, h: string) => bcrypt.compare(p, h);
+
+/** Who may see studio costs and margins (quotes, orders, reports, AI tools). */
+export const seesCost = (role?: Role | null) => !!role && ['OWNER', 'MANAGER', 'ACCOUNTS', 'DESIGNER'].includes(role);

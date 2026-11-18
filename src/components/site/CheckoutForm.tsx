@@ -26,7 +26,7 @@ export default function CheckoutForm({ items, shipping, pickupAddress, online, c
     <form action={run} className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
       <div className="space-y-6">
         <section className="card-pad">
-          <h2 className="text-lg font-semibold">Your details</h2>
+          <h2 className="text-lg">Your details</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div><label className="label" htmlFor="name">Name</label><input id="name" name="name" defaultValue={initial.name} required className="input" autoComplete="name" /></div>
             <div><label className="label" htmlFor="phone">Mobile</label><input id="phone" name="phone" type="tel" defaultValue={initial.phone} required className="input" autoComplete="tel" /></div>
@@ -36,13 +36,14 @@ export default function CheckoutForm({ items, shipping, pickupAddress, online, c
         </section>
 
         <section className="card-pad">
-          <h2 className="text-lg font-semibold">Delivery</h2>
+          <h2 className="text-lg">Delivery</h2>
           <input type="hidden" name="fulfilment" value={fulfilment} />
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {([['COURIER', 'Courier to my address', `${shipping.tamilNadu ? `₹${shipping.tamilNadu} in Tamil Nadu, ₹${shipping.otherStates} elsewhere` : 'Free'} · free above ₹${shipping.freeAbove.toLocaleString('en-IN')}`], ['PICKUP', 'Pick up from the studio', pickupAddress]] as const).map(([v, t, d]) => (
-              <button key={v} type="button" onClick={() => setFulfilment(v)} className={`opt ${fulfilment === v ? 'opt-on' : ''}`} aria-pressed={fulfilment === v}><span className="font-semibold">{t}</span><span className="text-xs text-ink-soft">{d}</span></button>
-            ))}
-          </div>
+          <label className="mt-4 block text-sm"><span className="label">How do you want it?</span>
+            <select className="input" value={fulfilment} onChange={(e) => setFulfilment(e.target.value as 'COURIER' | 'PICKUP')}>
+              <option value="COURIER">Courier to my address ({shipping.tamilNadu ? `₹${shipping.tamilNadu} in Tamil Nadu, ₹${shipping.otherStates} elsewhere` : 'free'}; free above ₹{shipping.freeAbove.toLocaleString('en-IN')})</option>
+              <option value="PICKUP">Pick up free from the studio</option>
+            </select>
+            {fulfilment === 'PICKUP' && <p className="hint">{pickupAddress}</p>}</label>
           {fulfilment === 'COURIER' && (
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2"><label className="label" htmlFor="line1">Address</label><input id="line1" name="line1" defaultValue={initial.line1} required className="input" autoComplete="address-line1" placeholder="Door no., street" /></div>
@@ -58,20 +59,21 @@ export default function CheckoutForm({ items, shipping, pickupAddress, online, c
         </section>
 
         <section className="card-pad">
-          <h2 className="text-lg font-semibold">Payment</h2>
+          <h2 className="text-lg">Payment</h2>
           <input type="hidden" name="pay" value={effectivePay} />
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {([['ONLINE', 'Pay online', 'UPI, cards, net banking (Razorpay)'], ['PICKUP', 'Pay at pickup', 'Cash or UPI at the studio'], ['CREDIT', 'On account', 'Approved business accounts']] as const).map(([v, t, d]) => (
-              <button key={v} type="button" disabled={!payOk(v)} onClick={() => setPay(v)} className={`opt ${effectivePay === v ? 'opt-on' : ''} disabled:opacity-40`} aria-pressed={effectivePay === v}><span className="font-semibold">{t}</span><span className="text-xs text-ink-soft">{d}</span></button>
-            ))}
-          </div>
+          <label className="mt-4 block text-sm"><span className="label">How will you pay?</span>
+            <select className="input" value={effectivePay} onChange={(e) => setPay(e.target.value as 'ONLINE' | 'PICKUP' | 'CREDIT')}>
+              <option value="ONLINE" disabled={!payOk('ONLINE')}>Pay online now: UPI, cards, net banking{!online ? ' (not available yet)' : ''}</option>
+              <option value="PICKUP" disabled={!payOk('PICKUP')}>Pay at pickup: cash or UPI{fulfilment !== 'PICKUP' ? ' (pickup orders only)' : ''}</option>
+              <option value="CREDIT" disabled={!payOk('CREDIT')}>On account, by the invoice due date{!credit ? ' (approved businesses only)' : ''}</option>
+            </select></label>
           {!online && <p className="hint mt-2">Online payment is being set up. Choose pickup, or contact us to pay by bank transfer.</p>}
           <label className="mt-4 block"><span className="label">Notes for this order <span className="font-normal text-ink-faint">(optional)</span></span><textarea name="notes" className="input min-h-[70px]" maxLength={800} placeholder="Deadline, delivery instructions…" /></label>
         </section>
       </div>
 
       <aside className="card-pad h-fit lg:sticky lg:top-24">
-        <h2 className="text-lg font-semibold">Order summary</h2>
+        <h2 className="text-lg">Order summary</h2>
         <ul className="mt-3 divide-y divide-line text-sm">
           {items.map((i, k) => <li key={k} className="flex justify-between gap-3 py-2"><span><b>{i.name}</b><br /><span className="text-xs text-ink-soft">{i.qty.toLocaleString('en-IN')} pcs</span></span><span className="num">{rs2(i.total)}</span></li>)}
         </ul>

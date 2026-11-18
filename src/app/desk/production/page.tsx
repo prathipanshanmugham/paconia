@@ -5,6 +5,7 @@ import { Badge, Notice, PageHead } from '@/components/ui';
 import { STAGE_LABEL, routeOf } from '@/lib/orders';
 import { dateShort } from '@/lib/format';
 import SubmitButton from '@/components/SubmitButton';
+import TabSelect from '@/components/TabSelect';
 import { issueJobMaterials, moveJob, setJobMachine, toggleRush } from '@/app/actions/desk-orders';
 import type { JobStage } from '@/generated/prisma/client';
 
@@ -29,9 +30,8 @@ export default async function Production({ searchParams }: { searchParams: { mac
     <>
       <PageHead title="Production" sub={`${jobs.length} jobs on the floor · ${waiting} waiting for proof approval · ${doneToday} finished in the last 24 hours`} />
       {searchParams.err && <div className="mb-4"><Notice tone="bad">{searchParams.err}</Notice></div>}
-      <div className="mb-5 flex flex-wrap gap-2">
-        <Link href="/desk/production" className={`chip ${!searchParams.machine ? 'chip-on' : ''}`}>All machines</Link>
-        {machines.map((m) => <Link key={m.id} href={`/desk/production?machine=${m.code}`} className={`chip ${searchParams.machine === m.code ? 'chip-on' : ''}`}>{m.name}{m.status === 'MAINTENANCE' ? ' (down)' : ''}</Link>)}
+      <div className="mb-5 max-w-xs"><label className="label" htmlFor="machine-filter">Show jobs on</label>
+        <TabSelect current={from} items={[{ href: '/desk/production', label: 'All machines' }, ...machines.map((m) => ({ href: `/desk/production?machine=${m.code}`, label: `${m.name}${m.status === 'MAINTENANCE' ? ' (under maintenance)' : ''}` }))]} />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {COLS.map((st) => {

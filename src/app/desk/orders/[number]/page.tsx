@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { can, requireStaff } from '@/lib/auth';
+import { can, requireStaff, seesCost } from '@/lib/auth';
 import { Badge, KV, Notice, PageHead } from '@/components/ui';
 import { CHANNEL_LABEL, ORDER_STATUS_LABEL, ORDER_TONE, STAGE_LABEL, routeOf } from '@/lib/orders';
 import { dateFmt, dateTime, inr2, num } from '@/lib/format';
+import { margin } from '@/lib/pricing';
+import { getPricing } from '@/lib/settings';
 import { fileUrl, prettySize } from '@/lib/files';
 import ActionForm from '@/components/FormMessage';
 import SubmitButton from '@/components/SubmitButton';
@@ -25,6 +27,7 @@ export default async function DeskOrder({ params, searchParams }: { params: { nu
     },
   });
   if (!o) notFound();
+  const ps = await getPricing();
   const activity = await db.activity.findMany({ where: { entity: 'order', entityId: o.id }, orderBy: { createdAt: 'desc' }, take: 30 });
   const due = Math.max(0, num(o.total) - num(o.amountPaid));
   const inv = o.invoices.find((i) => !i.cancelled);
@@ -159,6 +162,7 @@ export default async function DeskOrder({ params, searchParams }: { params: { nu
               <div className="flex justify-between"><span>Received</span><span>{inr2(o.amountPaid)}</span></div>
               {due > 0.009 && <div className="flex justify-between font-semibold text-amber-800"><span>Balance</span><span>{inr2(due)}</span></div>}
             </div>
+            {num(o.cost) > 0 && seesCost(s.role) && (() => { const mm = margin(num(o.subtotal) - num(o.discount), num(o.cost)); return <div className="num mt-3 flex items-center justify-between rounded-lg bg-paper px-3 py-2 text-sm"><span className="text-ink-soft">Cost {inr2(o.cost)}, profit {inr2(mm.amount)}</span><Badge tone={mm.pct < ps.minMargin ? 'bad' : mm.pct < ps.targetMargin ? 'warn' : 'good'}>{mm.pct}% margin</Badge></div>; })()}
             <p className="mt-2 text-xs text-ink-soft">{TERMS[o.terms]}{o.terms === 'CREDIT' && c.creditDays ? ` · ${c.creditDays} days` : ''}</p>
             {o.payments.length > 0 && <ul className="mt-3 space-y-1 border-t border-line pt-3 text-xs">{o.payments.map((p) => <li key={p.id} className="flex justify-between gap-2"><span className="text-ink-soft"><span className="mono">{p.number}</span> · {dateFmt(p.receivedAt)} · {p.method}{p.reference ? ` · ${p.reference}` : ''}</span><span className="num">{inr2(p.amount)}</span></li>)}</ul>}
             {due > 0.009 && o.status !== 'CANCELLED' && (

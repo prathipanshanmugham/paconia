@@ -7,6 +7,9 @@ import ActionForm from '@/components/FormMessage';
 import SubmitButton from '@/components/SubmitButton';
 import { saveBusiness, saveMachine, saveUser } from '@/app/actions/desk-admin';
 import { paymentsDemo, razorpayReady } from '@/lib/razorpay';
+import { revokeApiKey } from '@/app/actions/desk-ai';
+import ApiKeyForm from '@/components/desk/ApiKeyForm';
+import { dateTime } from '@/lib/format';
 
 export const metadata = { title: 'Settings' };
 const ROLES = ['OWNER', 'MANAGER', 'DESIGNER', 'OPERATOR', 'ACCOUNTS'] as const;
@@ -17,8 +20,8 @@ const ROLE_HINT: Record<(typeof ROLES)[number], string> = {
 
 export default async function Settings({ searchParams }: { searchParams: { tab?: string } }) {
   const s = await requireStaff('settings');
-  const tab = searchParams.tab === 'team' && can(s.role, 'users') ? 'team' : searchParams.tab === 'machines' ? 'machines' : 'business';
-  const items = [{ href: '/desk/settings', label: 'Business' }, ...(can(s.role, 'users') ? [{ href: '/desk/settings?tab=team', label: 'Team' }] : []), { href: '/desk/settings?tab=machines', label: 'Machines' }];
+  const tab = (searchParams.tab === 'team' || searchParams.tab === 'ai') && can(s.role, 'users') ? searchParams.tab : searchParams.tab === 'machines' ? 'machines' : 'business';
+  const items = [{ href: '/desk/settings', label: 'Business' }, ...(can(s.role, 'users') ? [{ href: '/desk/settings?tab=team', label: 'Team & logins' }, { href: '/desk/settings?tab=ai', label: 'AI & API access' }] : []), { href: '/desk/settings?tab=machines', label: 'Machines' }];
   return (
     <>
       <PageHead title="Settings" />
@@ -26,6 +29,7 @@ export default async function Settings({ searchParams }: { searchParams: { tab?:
       {tab === 'business' && <Business />}
       {tab === 'team' && <Team me={s.userId} />}
       {tab === 'machines' && <Machines />}
+      {tab === 'ai' && <AiAccess me={s.userId} />}
     </>
   );
 }
@@ -75,7 +79,7 @@ async function Team({ me }: { me: string }) {
   const users = await db.user.findMany({ where: { role: { not: 'CUSTOMER' } }, orderBy: [{ active: 'desc' }, { createdAt: 'asc' }] });
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-      <div className="space-y-3">{users.map((u) => (
+      <div className="min-w-0 space-y-3">{users.map((u) => (
         <details key={u.id} className="card p-4">
           <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2"><span><b>{u.name}</b> <span className="text-sm text-ink-soft">{u.email}</span>{u.id === me && <span className="text-xs text-ink-faint"> (you)</span>}</span><span className="flex gap-1"><Badge tone="info">{ROLE_LABEL[u.role]}</Badge>{!u.active && <Badge tone="muted">Inactive</Badge>}</span></summary>
           <ActionForm action={saveUser} className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
@@ -124,5 +128,44 @@ async function Machines() {
         </ActionForm>
       </section>
     ))}</div>
+  );
+}
+
+async function AiAccess({ me }: { me: string }) {
+  const [keys, users] = await Promise.all([
+    db.apiKey.findMany({ orderBy: [{ revokedAt: 'asc' }, { createdAt: 'desc' }], include: { user: true } }),
+    db.user.findMany({ where: { role: { not: 'CUSTOMER' }, active: true }, orderBy: { name: 'asc' } }),
+  ]);
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://paconia.com').replace(/\/$/, '');
+  return (
+    <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="min-w-0 space-y-6">
+        <section className="card overflow-x-auto">
+          <div className="panel-head"><h2 className="text-base">Keys</h2><span className="text-sm text-ink-soft">{keys.filter((k) => !k.revokedAt).length} active</span></div>
+          {keys.length ? <table className="tbl min-w-[640px]"><thead><tr><th>Key</th><th>Acts as</th><th>Access</th><th>Last used</th><th /></tr></thead>
+            <tbody>{keys.map((k) => (
+              <tr key={k.id} className={k.revokedAt ? 'opacity-50' : ''}>
+                <td><b>{k.name}</b><div className="text-xs text-ink-faint">{k.prefix}…, made {dateTime(k.createdAt)}</div></td>
+                <td>{k.user.name}<div className="text-xs text-ink-faint">{ROLE_LABEL[k.user.role]}</div></td>
+                <td><Badge tone={k.access === 'WRITE' ? 'warn' : 'info'}>{k.access === 'WRITE' ? 'Read and write' : 'Read only'}</Badge></td>
+                <td className="text-sm">{k.lastUsedAt ? <>{dateTime(k.lastUsedAt)}<div className="text-xs text-ink-faint">{k.uses} calls</div></> : <span className="text-ink-faint">Never</span>}</td>
+                <td className="text-right">{k.revokedAt ? <span className="text-xs text-ink-faint">Revoked</span> : <form action={revokeApiKey}><input type="hidden" name="id" value={k.id} /><SubmitButton className="btn-ghost btn-sm text-rose-700" confirm={`Revoke “${k.name}”? Anything using it stops working at once.`} pendingText="…">Revoke</SubmitButton></form>}</td>
+              </tr>
+            ))}</tbody></table> : <p className="px-5 py-8 text-sm text-ink-soft">No keys yet. Create one to connect Claude.</p>}
+        </section>
+        <section className="card-pad text-sm">
+          <h2 className="text-base">Connect Claude</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-ink-soft">
+            <li>Create a key on the right. Pick who it acts as and whether it may change things.</li>
+            <li>In Claude, open Settings, then Connectors, and add a custom connector. Paste the connector URL shown after you create the key.</li>
+            <li>Ask things like “what needs a proof today?”, “quote 2,000 kraft labels 75 × 50 for Kongu Foods at 40% margin” or “which quotes expire this week?”.</li>
+          </ol>
+          <p className="mt-4 font-semibold">What the AI can use</p>
+          <p className="mt-1 text-ink-soft">Looking up: today’s overview, products and options, exact pricing with cost and margin, orders, quotes, customers, stock, the production board, enquiries, and sales, margin, money-to-collect, GST and expense reports. With a read-and-write key: add customers, make and renew quotes, turn quotes into orders, book orders, record payments, start production, move jobs, issue and adjust stock, hand over or cancel orders, add expenses.</p>
+          <p className="mt-3 text-ink-soft">Every change appears in the order’s activity log with the key’s name. For scripts, the same tools are at <code className="break-all text-xs">{base}/api/v1/tools</code> with the header <code className="break-all text-xs">Authorization: Bearer pac_…</code>; MCP clients that send headers can use <code className="break-all text-xs">{base}/mcp</code>.</p>
+        </section>
+      </div>
+      <section className="card-pad h-fit"><h2 className="mb-4 text-base">Create a key</h2><ApiKeyForm users={users.map((u) => ({ id: u.id, name: u.name, role: ROLE_LABEL[u.role] }))} base={base} me={me} /></section>
+    </div>
   );
 }

@@ -170,7 +170,15 @@ export async function savePricing(_p: FormResult, fd: FormData): Promise<FormRes
       laser: { perMinute: g('laser.perMinute'), engraveCm2PerMin: g('laser.engraveCm2PerMin'), engraveFill: g('laser.engraveFill'), setup: g('laser.setup'), cutSpeed: { ACR: g('laser.cutSpeed.ACR'), MDF: g('laser.cutSpeed.MDF'), PLY: g('laser.cutSpeed.PLY'), LTH: g('laser.cutSpeed.LTH') } },
       pouch: { print: g('pouch.print'), white: g('pouch.white'), setup: g('pouch.setup'), wastePct: g('pouch.wastePct') },
       setupFee: g('setupFee'), setupSheets: g('setupSheets'), wastePct: g('wastePct'), minLine: g('minLine'),
+      costs: {
+        clickCmyk: g('costs.clickCmyk'), clickWhite: g('costs.clickWhite'),
+        lam: { gloss: g('costs.lam.gloss'), matte: g('costs.lam.matte'), soft: g('costs.lam.soft') },
+        cut: { kiss: g('costs.cut.kiss'), through: g('costs.cut.through'), guillotine: g('costs.cut.guillotine'), crease: g('costs.cut.crease') },
+        laserPerMinute: g('costs.laserPerMinute'), pouchPrint: g('costs.pouchPrint'), pouchWhite: g('costs.pouchWhite'), setup: g('costs.setup'),
+      },
+      targetMargin: g('targetMargin'), minMargin: g('minMargin'),
     };
+    if (ps.targetMargin > 90 || ps.minMargin > ps.targetMargin) throw new Error('Minimum margin must be below the target margin, and both under 90%');
     if (ps.sheet.w < 100 || ps.sheet.h < 100) throw new Error('Sheet size looks wrong');
     if (ps.laser.engraveCm2PerMin <= 0 || Object.values(ps.laser.cutSpeed).some((v) => v <= 0)) throw new Error('Laser speeds must be above zero');
     await saveSetting('pricing', ps);

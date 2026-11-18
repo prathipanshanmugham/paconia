@@ -90,7 +90,7 @@ export async function placeOrder(_prev: CheckoutState, fd: FormData): Promise<Ch
     const r = l.priced as Extract<typeof l.priced, { ok: true }>;
     const cfg = l.product.config as unknown as ProductConfig;
     return {
-      productId: l.productId, name: l.product.name, summary: r.summary + (l.notes ? ` · Note: ${l.notes}` : ''), spec: l.spec, qty: r.qty, unitPrice: r.unit, lineTotal: r.total,
+      productId: l.productId, name: l.product.name, summary: r.summary + (l.notes ? ` · Note: ${l.notes}` : ''), spec: l.spec, qty: r.qty, unitPrice: r.unit, lineTotal: r.total, lineCost: r.cost,
       hsn: l.product.hsn, gstRate: l.product.gstRate, leadDays: l.product.leadDays, artworkIds: l.artworkIds,
       estimate: { route: r.route, sheets: r.sheets, ups: r.ups, materials: r.materials, minutes: r.minutes, cut: cfg.cut },
     };

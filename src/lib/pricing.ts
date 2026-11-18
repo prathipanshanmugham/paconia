@@ -10,7 +10,7 @@
  */
 
 export type Size = { label: string; w: number; h: number; d?: number; code?: string; f?: number; round?: boolean };
-export type Extra = { code: string; label: string; price: number; per: 'piece' | 'job'; material?: string };
+export type Extra = { code: string; label: string; price: number; per: 'piece' | 'job'; material?: string; cost?: number };
 export type CutType = 'kiss' | 'through' | 'guillotine' | 'laser' | 'none';
 export type Form = 'flat' | 'box' | 'sleeve';
 
@@ -40,7 +40,7 @@ export type Spec = {
 };
 
 export type MaterialInfo = {
-  code: string; name: string; price: number; uom: string;
+  code: string; name: string; price: number; cost?: number; uom: string;
   sheetW?: number | null; sheetH?: number | null; needsWhite: boolean; colour?: string | null;
 };
 
@@ -55,6 +55,16 @@ export type PricingSettings = {
   setupSheets: number;
   wastePct: number;
   minLine: number;
+  /** What each step really costs the studio (toner, drum, film, blades, power, labour). Margin = selling price − cost. */
+  costs: {
+    clickCmyk: number; clickWhite: number;
+    lam: { gloss: number; matte: number; soft: number };
+    cut: { kiss: number; through: number; guillotine: number; crease: number };
+    laserPerMinute: number; pouchPrint: number; pouchWhite: number; setup: number;
+  };
+  /** Margin the quote builder aims for, and the level below which it warns. Percent of the selling price. */
+  targetMargin: number;
+  minMargin: number;
 };
 
 export const DEFAULT_PRICING: PricingSettings = {
@@ -68,6 +78,14 @@ export const DEFAULT_PRICING: PricingSettings = {
   setupSheets: 2,
   wastePct: 4,
   minLine: 300,
+  costs: {
+    clickCmyk: 6.5, clickWhite: 6,
+    lam: { gloss: 3, matte: 3, soft: 8 },
+    cut: { kiss: 2, through: 3, guillotine: 0.5, crease: 1.5 },
+    laserPerMinute: 7, pouchPrint: 4.5, pouchWhite: 3.5, setup: 60,
+  },
+  targetMargin: 35,
+  minMargin: 20,
 };
 
 export const FINISH_LABEL: Record<string, string> = {
@@ -84,6 +102,9 @@ export type PriceOk = {
   ups?: number; sheets?: number; minutes?: number;
   white: boolean;
   breakdown: PriceLine[];
+  /** Studio cost of the job (materials at cost + process costs). Never shown to customers. */
+  cost: number;
+  costLines: PriceLine[];
   materials: { code: string; qty: number }[];
   summary: string;
   route: Stage[];
@@ -137,6 +158,19 @@ function extrasCost(cfg: ProductConfig, spec: Spec, qty: number) {
   }
   return out;
 }
+
+function extrasCostPrice(cfg: ProductConfig, spec: Spec, qty: number, mats: Record<string, MaterialInfo>) {
+  const out: PriceLine[] = [];
+  for (const code of spec.extras || []) {
+    const e = cfg.extras?.find((x) => x.code === code);
+    if (!e) continue;
+    const unit = e.cost ?? (e.material && mats[e.material]?.cost !== undefined ? mats[e.material].cost! : e.price * 0.5);
+    out.push({ label: e.label, amount: r2(e.per === 'piece' ? unit * qty : unit) });
+  }
+  return out;
+}
+const costOf = (m: MaterialInfo) => (m.cost !== undefined && m.cost !== null ? m.cost : m.price * 0.7);
+const sum = (l: PriceLine[]) => r2(l.reduce((a, x) => a + x.amount, 0));
 
 function extraMaterials(cfg: ProductConfig, spec: Spec, qty: number) {
   const out: { code: string; qty: number }[] = [];
@@ -204,8 +238,15 @@ export function price(
     let total = lines.reduce((a, l) => a + l.amount, 0);
     if (total < ps.minLine) { lines.push({ label: 'Minimum order top-up', amount: r2(ps.minLine - total) }); total = ps.minLine; }
     total = Math.round(total);
+    const pc = ps.costs;
+    const costLines: PriceLine[] = [
+      { label: 'Set-up labour', amount: pc.setup },
+      { label: `Pouch blanks: ${used} × ${costOf(blank).toFixed(2)}`, amount: r2(costOf(blank) * used) },
+      { label: `Printing: ${qty} × ${(pc.pouchPrint + (white ? pc.pouchWhite : 0)).toFixed(2)}`, amount: r2((pc.pouchPrint + (white ? pc.pouchWhite : 0)) * qty) },
+      ...extrasCostPrice(cfg, spec, qty, mats),
+    ];
     return {
-      ok: true, qty, unit: r2(total / qty), total, dims, piece: { w: dims.w, h: dims.h }, white, breakdown: lines,
+      ok: true, qty, unit: r2(total / qty), total, dims, piece: { w: dims.w, h: dims.h }, white, breakdown: lines, cost: sum(costLines), costLines,
       materials: [{ code, qty: used }, ...extraMaterials(cfg, spec, qty)], route,
       summary: `${sizeLabel} (${dims.w} × ${dims.h} mm) · ${blank.name} · CMYK${white ? ' + white' : ''}`,
     };
@@ -238,9 +279,15 @@ export function price(
     let total = lines.reduce((a, l) => a + l.amount, 0);
     if (total < ps.minLine) { lines.push({ label: 'Minimum order top-up', amount: r2(ps.minLine - total) }); total = ps.minLine; }
     total = Math.round(total);
+    const costLines: PriceLine[] = [
+      { label: 'Set-up labour', amount: ps.costs.setup },
+      { label: `${mat.name}: ${Math.min(sheets, qty * areaShare * 1.15).toFixed(2)} sheets × ${costOf(mat).toFixed(2)}`, amount: r2(costOf(mat) * Math.min(sheets, qty * areaShare * 1.15)) },
+      { label: `Laser running: ${(minutes * qty).toFixed(1)} min × ${ps.costs.laserPerMinute.toFixed(2)}`, amount: r2(minutes * qty * ps.costs.laserPerMinute) },
+      ...extrasCostPrice(cfg, spec, qty, mats),
+    ];
     return {
       ok: true, qty, unit: r2(total / qty), total, dims, piece: { w: pw, h: ph }, ups: fit.n, sheets, minutes: r2(minutes * qty), white: false,
-      breakdown: lines, materials: [{ code: mat.code, qty: sheets }, ...extraMaterials(cfg, spec, qty)], route,
+      breakdown: lines, cost: sum(costLines), costLines, materials: [{ code: mat.code, qty: sheets }, ...extraMaterials(cfg, spec, qty)], route,
       summary: `${sizeLabel} (${dimText}) · ${mat.name} · ${FINISH_LABEL[spec.finish] || spec.finish}`,
     };
   }
@@ -277,9 +324,22 @@ export function price(
   let total = lines.reduce((a, l) => a + l.amount, 0);
   if (total < ps.minLine) { lines.push({ label: 'Minimum order top-up', amount: r2(ps.minLine - total) }); total = ps.minLine; }
   total = Math.round(total);
+  const pc = ps.costs;
+  const clickCost = pc.clickCmyk * sides + (white ? pc.clickWhite * sides : 0);
+  const lamCost = spec.finish === 'gloss' ? pc.lam.gloss : spec.finish === 'matte' ? pc.lam.matte : spec.finish === 'soft' ? pc.lam.soft : 0;
+  const cutCost = cfg.cut === 'kiss' ? pc.cut.kiss : cfg.cut === 'through' ? pc.cut.through : cfg.cut === 'guillotine' ? pc.cut.guillotine : 0;
+  const creaseCost = cfg.form === 'box' ? pc.cut.crease : 0;
+  const costLines: PriceLine[] = [
+    { label: 'Set-up labour', amount: pc.setup },
+    { label: `${mat.name}: ${sheets} × ${costOf(mat).toFixed(2)}`, amount: r2(costOf(mat) * sheets) },
+    { label: `Toner and drum: ${sheets} × ${clickCost.toFixed(2)}`, amount: r2(clickCost * sheets) },
+  ];
+  if (lamCost) costLines.push({ label: `Lamination film: ${sheets} × ${lamCost.toFixed(2)}`, amount: r2(lamCost * sheets) });
+  if (cutCost + creaseCost) costLines.push({ label: `Cutting${creaseCost ? ' and creasing' : ''}: ${sheets} × ${(cutCost + creaseCost).toFixed(2)}`, amount: r2((cutCost + creaseCost) * sheets) });
+  costLines.push(...extrasCostPrice(cfg, spec, qty, mats));
   return {
     ok: true, qty, unit: r2(total / qty), total, dims, piece: { w: pw, h: ph }, ups: fit.n, sheets, white,
-    breakdown: lines, materials: [{ code: mat.code, qty: sheets }, ...extraMaterials(cfg, spec, qty)], route,
+    breakdown: lines, cost: sum(costLines), costLines, materials: [{ code: mat.code, qty: sheets }, ...extraMaterials(cfg, spec, qty)], route,
     summary: `${sizeLabel} (${dimText}) · ${mat.name} · CMYK${white ? ' + white' : ''}${sides === 2 ? ' both sides' : ''} · ${FINISH_LABEL[spec.finish] || spec.finish}`,
   };
 }
@@ -290,4 +350,16 @@ export function tierPrices(model: 'SHEET' | 'POUCH' | 'LASER', cfg: ProductConfi
     const r = price(model, cfg, { ...spec, qty: q }, mats, ps);
     return { qty: q, unit: r.ok ? r.unit : null, total: r.ok ? r.total : null };
   });
+}
+
+/** Margin on a selling total against a cost, as rupees and percent of the selling price. */
+export function margin(total: number, cost: number) {
+  const m = r2(total - cost);
+  return { amount: m, pct: total > 0 ? Math.round((m / total) * 1000) / 10 : 0 };
+}
+
+/** Unit price that gives `pct` margin on `cost` for `qty` pieces. */
+export function priceForMargin(cost: number, qty: number, pct: number) {
+  const p = Math.min(Math.max(pct, 0), 95);
+  return qty > 0 ? Math.ceil((cost / (1 - p / 100) / qty) * 100) / 100 : 0;
 }
